@@ -4,6 +4,16 @@
 
 :root {
   color-scheme: light;
+  --pn-navy: #061b5a;
+  --pn-navy-dark: #04113d;
+  --pn-bg: #f6f8fc;
+  --pn-card: #ffffff;
+  --pn-border: #dde6f1;
+  --pn-muted: #5b6b84;
+  --pn-text: #0f172a;
+  --pn-teal: #0f6b7a;
+  --pn-gold: #ffd29a;
+  --pn-red: #d71920;
 }
 
 * {
@@ -17,7 +27,8 @@ body {
 
 body {
   margin: 0;
-  @apply bg-slate-50 text-slate-950;
+  background: var(--pn-bg);
+  color: var(--pn-text);
 }
 
 button,
@@ -32,6 +43,6 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
-  outline: 2px solid theme("colors.slate.950");
+  outline: 2px solid var(--pn-teal);
   outline-offset: 2px;
 }

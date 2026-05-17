@@ -4,6 +4,8 @@ PulseOps AI Incident Command Center is a same-day sales-engineering proof of con
 
 The demo models an active customer incident room where support, customer contacts, engineering managers, and an AI assistant coordinate in a shared live channel. Users can switch incidents, publish updates, view presence, restore history when Message Persistence is enabled, ask the AI assistant for summaries and next actions, and publish those AI outputs back into the incident channel as normal events.
 
+The UI uses a PubNub-inspired visual theme for the sales engineering demo, without official PubNub logo artwork or external brand assets.
+
 ## Why This Matters To PubNub
 
 This is intentionally more than generic chat. It demonstrates PubNub as a managed real-time interaction layer for operational command centers:

@@ -98,14 +98,14 @@ function buildStatusMessage(
 
 function messageStyle(type: MessageType) {
   if (type.startsWith("ai_")) {
-    return "border-slate-800 bg-slate-900 text-white";
+    return "border-pn-navyDark bg-pn-navyDark text-white shadow-[0_14px_32px_rgba(4,17,61,0.16)]";
   }
 
   if (type === "system_event" || type === "status_change") {
-    return "border-slate-200 bg-slate-100 text-slate-700";
+    return "border-pn-border bg-pn-bg text-pn-muted";
   }
 
-  return "border-slate-200 bg-white text-slate-950";
+  return "border-pn-border bg-pn-card text-pn-text";
 }
 
 function messageLabel(type: MessageType) {
@@ -143,14 +143,14 @@ function aiSourceLabel(source: AiSource | null) {
 
 function aiSourceBadgeClass(source: AiSource | null) {
   if (source === "openai") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    return "border-cyan-200 bg-cyan-50 text-pn-teal";
   }
 
   if (source === "mock") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
+    return "border-amber-200 bg-amber-50 text-pn-goldDark";
   }
 
-  return "border-slate-200 bg-slate-50 text-slate-500";
+  return "border-pn-border bg-pn-bg text-pn-muted";
 }
 
 function SetupPanel({ configured }: { configured: boolean }) {
@@ -159,16 +159,16 @@ function SetupPanel({ configured }: { configured: boolean }) {
   }
 
   return (
-    <section className="border-b border-slate-200 bg-white px-6 py-4">
-      <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 lg:flex-row lg:items-center lg:justify-between">
+    <section className="border-b border-pn-border bg-pn-bg px-6 py-4">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-lg border border-pn-border bg-pn-card p-4 text-sm text-pn-muted shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="font-semibold text-slate-950">PubNub keys are not configured.</p>
+          <p className="font-semibold text-pn-text">PubNub keys are not configured.</p>
           <p>
             The interface is running with local demo history. Add browser-safe publish and
             subscribe keys to enable live messaging, history, and presence.
           </p>
         </div>
-        <div className="grid gap-1 font-mono text-xs text-slate-600 sm:grid-cols-2">
+        <div className="grid gap-1 font-mono text-xs text-pn-muted sm:grid-cols-2">
           <span>NEXT_PUBLIC_PUBNUB_PUBLISH_KEY</span>
           <span>NEXT_PUBLIC_PUBNUB_SUBSCRIBE_KEY</span>
           <span>NEXT_PUBLIC_PUBNUB_USER_ID</span>
@@ -198,18 +198,18 @@ function Header({
           : "Local preview";
 
   return (
-    <header className="border-b border-slate-200 bg-white px-6 py-4">
+    <header className="border-b border-pn-navyDark bg-pn-navy px-6 py-4 text-white shadow-[0_14px_36px_rgba(4,17,61,0.18)]">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-100">
-              <Activity className="h-5 w-5 text-slate-700" aria-hidden="true" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/20 bg-pn-navyDark">
+              <Activity className="h-5 w-5 text-pn-gold" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
+              <p className="text-sm font-medium uppercase tracking-wide text-pn-gold">
                 PubNub sales engineering POC
               </p>
-              <h1 className="text-2xl font-semibold text-slate-950">
+              <h1 className="text-2xl font-semibold text-white">
                 PulseOps AI Incident Command Center
               </h1>
             </div>
@@ -217,16 +217,16 @@ function Header({
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            <Radio className="h-4 w-4" aria-hidden="true" />
+          <div className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white">
+            <Radio className="h-4 w-4 text-pn-gold" aria-hidden="true" />
             {connectionLabel}
           </div>
-          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <label className="flex items-center gap-2 text-sm font-medium text-white/90">
             Acting as
             <select
               value={selectedUserId}
               onChange={(event) => setSelectedUserId(event.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm"
+              className="rounded-lg border border-white/20 bg-white px-3 py-2 text-sm text-pn-text shadow-sm"
             >
               {demoUsers.map((user) => (
                 <option key={user.uuid} value={user.uuid}>
@@ -251,12 +251,12 @@ function IncidentList({
   setActiveIncidentId: (value: string) => void;
 }) {
   return (
-    <aside className="border-r border-slate-200 bg-white p-4">
+    <aside className="border-r border-pn-border bg-pn-bg p-4">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-pn-muted">
           Incidents
         </h2>
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+        <span className="rounded-full border border-pn-border bg-pn-card px-2 py-1 text-xs font-medium text-pn-muted">
           {incidents.length}
         </span>
       </div>
@@ -271,32 +271,35 @@ function IncidentList({
               key={incident.id}
               type="button"
               onClick={() => setActiveIncidentId(incident.id)}
-              className={`w-full rounded-lg border p-4 text-left transition ${
+              className={`w-full rounded-lg border p-4 text-left shadow-sm transition ${
                 active
-                  ? "border-slate-900 bg-slate-950 text-white"
-                  : "border-slate-200 bg-white text-slate-950 hover:border-slate-300 hover:bg-slate-50"
+                  ? "border-pn-navyDark bg-pn-navyDark text-white shadow-[0_14px_28px_rgba(4,17,61,0.18)]"
+                  : "border-pn-border bg-pn-card text-pn-text hover:border-cyan-200 hover:bg-white"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold leading-5">{incident.title}</p>
-                  <p className={`mt-2 text-xs ${active ? "text-slate-300" : "text-slate-500"}`}>
+                  <p className={`mt-2 text-xs ${active ? "text-white/70" : "text-pn-muted"}`}>
                     {incident.customer}
                   </p>
                 </div>
-                <ChevronRight className="mt-1 h-4 w-4 shrink-0" aria-hidden="true" />
+                <ChevronRight
+                  className={`mt-1 h-4 w-4 shrink-0 ${active ? "text-pn-gold" : "text-pn-muted"}`}
+                  aria-hidden="true"
+                />
               </div>
               <div className="mt-4 flex flex-wrap gap-2 text-xs">
                 <span
                   className={`rounded-full px-2 py-1 ${
-                    active ? "bg-white/10 text-white" : "bg-slate-100 text-slate-700"
+                    active ? "bg-white/10 text-white" : "bg-pn-bg text-pn-muted"
                   }`}
                 >
                   {incident.severity}
                 </span>
                 <span
                   className={`rounded-full px-2 py-1 ${
-                    active ? "bg-white/10 text-white" : "bg-slate-100 text-slate-700"
+                    active ? "bg-white/10 text-white" : "bg-pn-bg text-pn-muted"
                   }`}
                 >
                   {status}
@@ -318,34 +321,40 @@ function IncidentHeader({
   onStatusChange: (status: IncidentStatus) => void;
 }) {
   return (
-    <section className="border-b border-slate-200 bg-white p-5">
+    <section className="border-b border-pn-border bg-pn-card p-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
-            <span className="rounded-full bg-slate-100 px-2 py-1">{incident.severity}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-1">{incident.status}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-1">{incident.started}</span>
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-medium text-pn-muted">
+            <span className="rounded-full border border-pn-border bg-pn-bg px-2 py-1">
+              {incident.severity}
+            </span>
+            <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-pn-teal">
+              {incident.status}
+            </span>
+            <span className="rounded-full border border-pn-border bg-pn-bg px-2 py-1">
+              {incident.started}
+            </span>
           </div>
-          <h2 className="text-xl font-semibold text-slate-950">{incident.title}</h2>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600">{incident.description}</p>
-          <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2 xl:grid-cols-4">
+          <h2 className="text-xl font-semibold text-pn-text">{incident.title}</h2>
+          <p className="mt-2 max-w-3xl text-sm text-pn-muted">{incident.description}</p>
+          <div className="mt-4 grid gap-3 text-sm text-pn-muted sm:grid-cols-2 xl:grid-cols-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Customer</p>
-              <p className="font-medium text-slate-950">{incident.customer}</p>
+              <p className="text-xs uppercase tracking-wide text-pn-muted">Customer</p>
+              <p className="font-medium text-pn-text">{incident.customer}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Started</p>
-              <p className="font-medium text-slate-950">{incident.started}</p>
+              <p className="text-xs uppercase tracking-wide text-pn-muted">Started</p>
+              <p className="font-medium text-pn-text">{incident.started}</p>
             </div>
             <div className="sm:col-span-2">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Channel</p>
-              <p className="font-mono text-xs font-medium text-slate-950">{incident.channel}</p>
+              <p className="text-xs uppercase tracking-wide text-pn-muted">Channel</p>
+              <p className="font-mono text-xs font-medium text-pn-teal">{incident.channel}</p>
             </div>
           </div>
         </div>
 
         <div className="min-w-[260px]">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-pn-muted">
             Status controls
           </p>
           <div className="grid grid-cols-2 gap-2">
@@ -356,8 +365,8 @@ function IncidentHeader({
                 onClick={() => onStatusChange(status)}
                 className={`rounded-lg border px-3 py-2 text-sm font-medium ${
                   incident.status === status
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    ? "border-pn-navyDark bg-pn-navyDark text-white shadow-sm"
+                    : "border-pn-border bg-pn-card text-pn-muted hover:border-cyan-200 hover:bg-cyan-50/50 hover:text-pn-teal"
                 }`}
               >
                 {status}
@@ -372,7 +381,7 @@ function IncidentHeader({
 
 function MessageFeed({ messages }: { messages: IncidentMessage[] }) {
   return (
-    <div className="flex-1 overflow-y-auto p-5">
+    <div className="flex-1 overflow-y-auto bg-pn-bg p-5">
       <div className="space-y-4">
         {messages.map((message) => {
           const ai = message.type.startsWith("ai_");
@@ -387,7 +396,7 @@ function MessageFeed({ messages }: { messages: IncidentMessage[] }) {
                 <div className="flex items-center gap-3">
                   <div
                     className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold ${
-                      ai ? "bg-white text-slate-900" : "bg-slate-900 text-white"
+                      ai ? "bg-white text-pn-navyDark" : "bg-pn-navy text-white"
                     }`}
                   >
                     {message.senderName
@@ -398,13 +407,13 @@ function MessageFeed({ messages }: { messages: IncidentMessage[] }) {
                   </div>
                   <div>
                     <p className="text-sm font-semibold">{message.senderName}</p>
-                    <p className={`text-xs ${ai ? "text-slate-300" : "text-slate-500"}`}>
+                    <p className={`text-xs ${ai ? "text-white/70" : "text-pn-muted"}`}>
                       {message.senderRole}
                     </p>
                   </div>
                 </div>
                 <div
-                  className={`flex items-center gap-2 text-xs ${ai ? "text-slate-300" : "text-slate-500"}`}
+                  className={`flex items-center gap-2 text-xs ${ai ? "text-white/70" : "text-pn-muted"}`}
                 >
                   <span>{messageLabel(message.type)}</span>
                   {aiSource ? <span>{aiSourceLabel(aiSource)}</span> : null}
@@ -454,7 +463,7 @@ function Composer({
   }
 
   return (
-    <form onSubmit={submit} className="border-t border-slate-200 bg-white p-4">
+    <form onSubmit={submit} className="border-t border-pn-border bg-pn-card p-4">
       <div className="flex gap-3">
         <input
           value={text}
@@ -462,12 +471,12 @@ function Composer({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder="Send an incident update"
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-950 shadow-sm placeholder:text-slate-400"
+          className="min-w-0 flex-1 rounded-lg border border-pn-border bg-white px-4 py-3 text-sm text-pn-text shadow-sm placeholder:text-slate-400"
         />
         <button
           type="submit"
           disabled={disabled || sending || !text.trim()}
-          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="inline-flex items-center gap-2 rounded-lg bg-pn-navy px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-pn-navyDark disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           <Send className="h-4 w-4" aria-hidden="true" />
           Send
@@ -493,35 +502,35 @@ function PresencePanel({
   notice: string;
 }) {
   return (
-    <section className="border-b border-slate-200 bg-white p-5">
+    <section className="border-b border-pn-border bg-pn-card p-5">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-slate-500" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-slate-950">Active participants</h2>
+          <Users className="h-4 w-4 text-pn-teal" aria-hidden="true" />
+          <h2 className="text-sm font-semibold text-pn-text">Active participants</h2>
         </div>
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+        <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-medium text-pn-teal">
           {onlineCount} online
         </span>
       </div>
-      <p className="mb-4 text-sm text-slate-600">{notice}</p>
+      <p className="mb-4 text-sm text-pn-muted">{notice}</p>
       <div className="space-y-3">
         {participants.length === 0 ? (
-          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+          <p className="rounded-lg border border-pn-border bg-pn-bg p-3 text-sm text-pn-muted">
             No live occupants reported yet.
           </p>
         ) : (
           participants.map((participant) => (
             <div key={participant.uuid} className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-pn-navy text-xs font-semibold text-white">
                 {participant.initials}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-950">
+                <p className="truncate text-sm font-medium text-pn-text">
                   {participant.displayName}
                 </p>
-                <p className="truncate text-xs text-slate-500">{participant.role}</p>
+                <p className="truncate text-xs text-pn-muted">{participant.role}</p>
               </div>
-              <span className="text-right text-xs text-slate-500">
+              <span className="text-right text-xs text-pn-muted">
                 {formatRelative(participant.lastActivity)}
               </span>
             </div>
@@ -596,11 +605,11 @@ function AiPanel({
   }
 
   return (
-    <section className="border-b border-slate-200 bg-white p-5">
+    <section className="border-b border-pn-border bg-pn-card p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Bot className="h-4 w-4 text-slate-500" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-slate-950">AI Assistant</h2>
+          <Bot className="h-4 w-4 text-pn-purple" aria-hidden="true" />
+          <h2 className="text-sm font-semibold text-pn-text">AI Assistant</h2>
         </div>
         <span
           className={`rounded-full border px-2 py-1 text-xs font-medium ${aiSourceBadgeClass(
@@ -621,31 +630,34 @@ function AiPanel({
               type="button"
               onClick={() => void runAiAction(item.action, item.type)}
               disabled={Boolean(loadingAction)}
-              className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-3 text-left text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-wait disabled:text-slate-400"
+              className="flex w-full items-center justify-between rounded-lg border border-pn-border bg-pn-card px-3 py-3 text-left text-sm font-medium text-pn-text shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/50 disabled:cursor-wait disabled:text-slate-400"
             >
               <span className="flex items-center gap-2">
-                <Icon className="h-4 w-4" aria-hidden="true" />
+                <Icon className="h-4 w-4 text-pn-teal" aria-hidden="true" />
                 {item.label}
               </span>
-              <span className="text-xs text-slate-500">{loading ? "Working" : "Publish"}</span>
+              <span className="text-xs text-pn-muted">{loading ? "Working" : "Publish"}</span>
             </button>
           );
         })}
       </div>
-      {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm text-pn-red">{error}</p> : null}
     </section>
   );
 }
 
 function ArchitectureNotes() {
   return (
-    <section className="bg-white p-5">
+    <section className="bg-pn-card p-5">
       <details className="group">
-        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-slate-950">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-pn-text">
           Architecture Notes
-          <ChevronRight className="h-4 w-4 transition group-open:rotate-90" aria-hidden="true" />
+          <ChevronRight
+            className="h-4 w-4 text-pn-teal transition group-open:rotate-90"
+            aria-hidden="true"
+          />
         </summary>
-        <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-600">
+        <ul className="mt-4 space-y-2 text-sm leading-6 text-pn-muted">
           <li>Each incident maps to a PubNub channel.</li>
           <li>PubNub handles real-time fanout to subscribed clients.</li>
           <li>Presence shows active participants.</li>
@@ -749,7 +761,7 @@ export function PulseOpsApp() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen bg-pn-bg">
       <Header
         selectedUserId={selectedUserId}
         setSelectedUserId={setSelectedUserId}
@@ -757,26 +769,26 @@ export function PulseOpsApp() {
       />
       <SetupPanel configured={pubnubConfigured} />
 
-      <div className="mx-auto grid max-w-7xl grid-cols-1 border-x border-slate-200 bg-white lg:grid-cols-[280px_minmax(0,1fr)_360px]">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 border-x border-pn-border bg-pn-card shadow-[0_18px_48px_rgba(6,27,90,0.08)] lg:grid-cols-[280px_minmax(0,1fr)_360px]">
         <IncidentList
           activeIncidentId={activeIncident.id}
           incidentStatuses={incidentStatuses}
           setActiveIncidentId={setActiveIncidentId}
         />
 
-        <section className="flex min-h-[760px] min-w-0 flex-col bg-slate-50">
+        <section className="flex min-h-[760px] min-w-0 flex-col bg-pn-bg">
           <IncidentHeader incident={activeIncident} onStatusChange={changeStatus} />
 
-          <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-medium">
+          <div className="border-b border-pn-border bg-pn-bg px-5 py-3">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-pn-muted">
+              <span className="inline-flex items-center gap-1 rounded-full border border-pn-border bg-pn-card px-2 py-1 font-medium text-pn-teal">
                 <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
                 {historyMode === "live" ? "Live history" : "Demo history"}
               </span>
               <span>{historyNotice}</span>
             </div>
             {actionError || lastError ? (
-              <p className="mt-2 text-xs text-red-600">{actionError ?? lastError}</p>
+              <p className="mt-2 text-xs text-pn-red">{actionError ?? lastError}</p>
             ) : null}
           </div>
 
@@ -784,7 +796,7 @@ export function PulseOpsApp() {
           <Composer onSend={sendMessage} disabled={false} />
         </section>
 
-        <aside className="border-l border-slate-200 bg-white">
+        <aside className="border-l border-pn-border bg-pn-card">
           <PresencePanel
             onlineCount={onlineCount}
             participants={participants}
@@ -796,12 +808,12 @@ export function PulseOpsApp() {
             latestAiSource={latestAiSource}
             onPublishAi={publishAiMessage}
           />
-          <section className="border-b border-slate-200 bg-white p-5">
+          <section className="border-b border-pn-border bg-pn-card p-5">
             <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-4 w-4 text-slate-500" aria-hidden="true" />
+              <ShieldCheck className="mt-0.5 h-4 w-4 text-pn-teal" aria-hidden="true" />
               <div>
-                <h2 className="text-sm font-semibold text-slate-950">Production posture</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
+                <h2 className="text-sm font-semibold text-pn-text">Production posture</h2>
+                <p className="mt-2 text-sm leading-6 text-pn-muted">
                   Browser code uses only publish and subscribe keys. Secret keys and
                   Access Manager grants belong on a trusted backend.
                 </p>
@@ -812,12 +824,12 @@ export function PulseOpsApp() {
         </aside>
       </div>
 
-      <footer className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 text-xs text-slate-500">
+      <footer className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 text-xs text-pn-muted">
         <span>
           Demo channel: {activeIncident.channel}
           <span className="ml-3">Run: {demoRunId || "default"}</span>
         </span>
-        <span className="inline-flex items-center gap-1">
+        <span className="inline-flex items-center gap-1 text-pn-teal">
           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
           Latest AI source: {aiSourceLabel(latestAiSource)}
         </span>
