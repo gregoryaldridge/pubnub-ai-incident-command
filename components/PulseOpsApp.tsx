@@ -13,10 +13,19 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useCallback, useMemo, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { aiUser, demoRunId, demoUsers, incidents } from "@/lib/data";
 import { formatRelative, formatTime, makeId } from "@/lib/format";
 import type {
+  ActivityIndicator,
   AiAction,
   AiResponse,
   AiSource,
@@ -24,6 +33,7 @@ import type {
   Incident,
   IncidentMessage,
   IncidentStatus,
+  MessageAudience,
   MessageType,
 } from "@/lib/types";
 import { useIncidentPubNub } from "@/hooks/useIncidentPubNub";
@@ -64,11 +74,13 @@ const aiActions: Array<{
 function buildUserMessage(
   incident: Incident,
   user: DemoUser,
-  text: string
+  text: string,
+  audience: MessageAudience
 ): IncidentMessage {
   return {
     id: makeId("msg"),
     channel: incident.channel,
+    audience,
     type: "user_message",
     senderId: user.uuid,
     senderName: user.displayName,
@@ -86,6 +98,7 @@ function buildStatusMessage(
   return {
     id: makeId("status"),
     channel: incident.channel,
+    audience: "customer",
     type: "status_change",
     senderId: user.uuid,
     senderName: user.displayName,
@@ -94,6 +107,60 @@ function buildStatusMessage(
     timestamp: new Date().toISOString(),
     metadata: { status },
   };
+}
+
+function canSelectAudience(user: DemoUser) {
+  return (
+    user.role === "Support Engineer" ||
+    user.role === "Engineering Manager" ||
+    user.role === "AI Assistant"
+  );
+}
+
+function defaultAudienceForUser(user: DemoUser): MessageAudience {
+  return canSelectAudience(user) ? "internal" : "customer";
+}
+
+function audienceLabel(audience: MessageAudience) {
+  return audience === "internal" ? "Internal" : "Customer-visible";
+}
+
+function audienceComposerLabel(audience: MessageAudience) {
+  return audience === "internal" ? "Internal note" : "Customer-visible update";
+}
+
+function audienceBadgeClass(audience: MessageAudience, inverted = false) {
+  if (inverted) {
+    return audience === "internal"
+      ? "border-white/15 bg-white/10 text-white"
+      : "border-pn-gold/50 bg-pn-gold/20 text-pn-gold";
+  }
+
+  return audience === "internal"
+    ? "border-indigo-200 bg-indigo-50 text-pn-purple"
+    : "border-cyan-200 bg-cyan-50 text-pn-teal";
+}
+
+function activityText(indicator: ActivityIndicator) {
+  if (indicator.kind === "typing") {
+    if (indicator.audience === "internal") {
+      return `${indicator.displayName} is typing an internal note...`;
+    }
+
+    return indicator.role === "Customer Contact"
+      ? `${indicator.displayName} is typing...`
+      : `${indicator.displayName} is typing a customer-visible update...`;
+  }
+
+  if (indicator.kind === "ai_summary") {
+    return "PulseOps AI is summarizing the incident...";
+  }
+
+  if (indicator.kind === "ai_next_actions") {
+    return "PulseOps AI is suggesting next actions...";
+  }
+
+  return "PulseOps AI is drafting a customer update...";
 }
 
 function messageStyle(type: MessageType) {
@@ -415,6 +482,14 @@ function MessageFeed({ messages }: { messages: IncidentMessage[] }) {
                 <div
                   className={`flex items-center gap-2 text-xs ${ai ? "text-white/70" : "text-pn-muted"}`}
                 >
+                  <span
+                    className={`rounded-full border px-2 py-0.5 font-medium ${audienceBadgeClass(
+                      message.audience,
+                      ai
+                    )}`}
+                  >
+                    {audienceLabel(message.audience)}
+                  </span>
                   <span>{messageLabel(message.type)}</span>
                   {aiSource ? <span>{aiSourceLabel(aiSource)}</span> : null}
                   <span>{formatTime(message.timestamp)}</span>
@@ -431,13 +506,79 @@ function MessageFeed({ messages }: { messages: IncidentMessage[] }) {
 
 function Composer({
   onSend,
+  onTyping,
   disabled,
+  audience,
+  canChooseAudience,
+  onAudienceChange,
 }: {
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, audience: MessageAudience) => Promise<void>;
+  onTyping: (audience: MessageAudience, isTyping: boolean) => void;
   disabled: boolean;
+  audience: MessageAudience;
+  canChooseAudience: boolean;
+  onAudienceChange: (audience: MessageAudience) => void;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const lastTypingAt = useRef(0);
+  const activeTypingAudience = useRef<MessageAudience | null>(null);
+
+  const publishTyping = useCallback(
+    (nextAudience: MessageAudience, isTyping: boolean, force = false) => {
+      if (!isTyping) {
+        const currentAudience = activeTypingAudience.current;
+        if (currentAudience) {
+          onTyping(currentAudience, false);
+          activeTypingAudience.current = null;
+        }
+        lastTypingAt.current = 0;
+        return;
+      }
+
+      const now = Date.now();
+      if (!force && now - lastTypingAt.current < 1_500) {
+        return;
+      }
+
+      if (
+        activeTypingAudience.current &&
+        activeTypingAudience.current !== nextAudience
+      ) {
+        onTyping(activeTypingAudience.current, false);
+      }
+
+      activeTypingAudience.current = nextAudience;
+      lastTypingAt.current = now;
+      onTyping(nextAudience, true);
+    },
+    [onTyping]
+  );
+
+  function updateText(value: string) {
+    setText(value);
+
+    if (value.trim()) {
+      publishTyping(audience, true);
+    } else {
+      publishTyping(audience, false, true);
+    }
+  }
+
+  function changeAudience(nextAudience: MessageAudience) {
+    if (nextAudience === audience) {
+      return;
+    }
+
+    publishTyping(audience, false, true);
+    onAudienceChange(nextAudience);
+
+    if (text.trim()) {
+      activeTypingAudience.current = nextAudience;
+      lastTypingAt.current = Date.now();
+      onTyping(nextAudience, true);
+    }
+  }
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -449,7 +590,8 @@ function Composer({
 
     setSending(true);
     try {
-      await onSend(trimmed);
+      publishTyping(audience, false, true);
+      await onSend(trimmed, audience);
       setText("");
     } finally {
       setSending(false);
@@ -464,11 +606,43 @@ function Composer({
 
   return (
     <form onSubmit={submit} className="border-t border-pn-border bg-pn-card p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        {canChooseAudience ? (
+          <div className="inline-flex rounded-lg border border-pn-border bg-pn-bg p-1">
+            {(["internal", "customer"] as MessageAudience[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => changeAudience(item)}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                  audience === item
+                    ? "bg-pn-navy text-white shadow-sm"
+                    : "text-pn-muted hover:bg-white hover:text-pn-teal"
+                }`}
+              >
+                {audienceComposerLabel(item)}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span
+            className={`rounded-full border px-2 py-1 text-xs font-medium ${audienceBadgeClass(
+              audience
+            )}`}
+          >
+            {audienceComposerLabel(audience)}
+          </span>
+        )}
+        <span className="text-xs text-pn-muted">
+          Publishing to {audienceLabel(audience).toLowerCase()} stream
+        </span>
+      </div>
       <div className="flex gap-3">
         <input
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => updateText(event.target.value)}
           onKeyDown={handleKeyDown}
+          onBlur={() => publishTyping(audience, false, true)}
           disabled={disabled}
           placeholder="Send an incident update"
           className="min-w-0 flex-1 rounded-lg border border-pn-border bg-white px-4 py-3 text-sm text-pn-text shadow-sm placeholder:text-slate-400"
@@ -541,23 +715,90 @@ function PresencePanel({
   );
 }
 
+function ActivityIndicators({
+  indicators,
+  localAiAction,
+}: {
+  indicators: ActivityIndicator[];
+  localAiAction: AiAction | null;
+}) {
+  const localIndicator = localAiAction
+    ? ({
+        id: `local-ai-${localAiAction}`,
+        userId: aiUser.uuid,
+        displayName: aiUser.displayName,
+        role: aiUser.role,
+        audience: localAiAction === "customer_update" ? "customer" : "internal",
+        kind:
+          localAiAction === "summary"
+            ? "ai_summary"
+            : localAiAction === "next_actions"
+              ? "ai_next_actions"
+              : "ai_customer_update",
+        expiresAt: Date.now() + 1_000,
+      } satisfies ActivityIndicator)
+    : null;
+  const visibleIndicators = localIndicator
+    ? [localIndicator, ...indicators]
+    : indicators;
+
+  if (visibleIndicators.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="border-t border-pn-border bg-pn-bg px-5 py-2">
+      <div className="flex flex-wrap gap-2 text-xs text-pn-muted">
+        {visibleIndicators.map((indicator) => (
+          <span
+            key={indicator.id}
+            className="inline-flex items-center gap-2 rounded-full border border-pn-border bg-pn-card px-3 py-1"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-pn-teal" aria-hidden="true" />
+            {activityText(indicator)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AiPanel({
   incident,
   messages,
   latestAiSource,
   onPublishAi,
+  onAiActivity,
 }: {
   incident: Incident;
   messages: IncidentMessage[];
   latestAiSource: AiSource | null;
   onPublishAi: (message: IncidentMessage) => Promise<void>;
+  onAiActivity: (
+    action: AiAction,
+    audience: MessageAudience,
+    isActive: boolean
+  ) => Promise<void>;
 }) {
   const [loadingAction, setLoadingAction] = useState<AiAction | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [customerDraft, setCustomerDraft] = useState<{
+    text: string;
+    source: AiSource;
+  } | null>(null);
+
+  useEffect(() => {
+    setCustomerDraft(null);
+    setError(null);
+  }, [incident.id]);
 
   async function runAiAction(action: AiAction, type: MessageType) {
+    const audience: MessageAudience =
+      action === "customer_update" ? "customer" : "internal";
+
     setLoadingAction(action);
     setError(null);
+    await onAiActivity(action, audience, true);
 
     try {
       const response = await fetch("/api/ai", {
@@ -582,9 +823,18 @@ function AiPanel({
             ? "mock"
             : "openai";
 
+      if (action === "customer_update") {
+        setCustomerDraft({
+          text: result.text,
+          source,
+        });
+        return;
+      }
+
       await onPublishAi({
         id: makeId("ai"),
         channel: incident.channel,
+        audience,
         type,
         senderId: aiUser.uuid,
         senderName: aiUser.displayName,
@@ -600,7 +850,38 @@ function AiPanel({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "AI action failed.");
     } finally {
+      await onAiActivity(action, audience, false);
       setLoadingAction(null);
+    }
+  }
+
+  async function publishCustomerDraft() {
+    if (!customerDraft) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await onPublishAi({
+        id: makeId("ai"),
+        channel: incident.channel,
+        audience: "customer",
+        type: "ai_customer_update",
+        senderId: aiUser.uuid,
+        senderName: aiUser.displayName,
+        senderRole: aiUser.role,
+        text: customerDraft.text,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          action: "customer_update",
+          source: customerDraft.source,
+          usedMock: customerDraft.source === "mock",
+        },
+      });
+      setCustomerDraft(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "AI publish failed.");
     }
   }
 
@@ -636,11 +917,45 @@ function AiPanel({
                 <Icon className="h-4 w-4 text-pn-teal" aria-hidden="true" />
                 {item.label}
               </span>
-              <span className="text-xs text-pn-muted">{loading ? "Working" : "Publish"}</span>
+              <span className="text-xs text-pn-muted">
+                {loading
+                  ? "Working"
+                  : item.action === "customer_update"
+                    ? "Draft"
+                    : "Publish"}
+              </span>
             </button>
           );
         })}
       </div>
+      {customerDraft ? (
+        <div className="mt-4 rounded-lg border border-pn-border bg-pn-bg p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-pn-muted">
+              Customer update draft
+            </span>
+            <span
+              className={`rounded-full border px-2 py-1 text-xs font-medium ${aiSourceBadgeClass(
+                customerDraft.source
+              )}`}
+            >
+              {aiSourceLabel(customerDraft.source)}
+            </span>
+          </div>
+          <p className="whitespace-pre-line text-sm leading-6 text-pn-text">
+            {customerDraft.text}
+          </p>
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => void publishCustomerDraft()}
+              className="rounded-lg bg-pn-navy px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-pn-navyDark"
+            >
+              Publish customer update
+            </button>
+          </div>
+        </div>
+      ) : null}
       {error ? <p className="mt-3 text-sm text-pn-red">{error}</p> : null}
     </section>
   );
@@ -658,11 +973,13 @@ function ArchitectureNotes() {
           />
         </summary>
         <ul className="mt-4 space-y-2 text-sm leading-6 text-pn-muted">
-          <li>Each incident maps to a PubNub channel.</li>
-          <li>PubNub handles real-time fanout to subscribed clients.</li>
+          <li>Each incident uses separate internal and customer-visible PubNub channels.</li>
+          <li>Internal participants subscribe to both channels; customer contacts subscribe only to customer-visible updates.</li>
+          <li>Role separation is simulated in this POC and would be enforced with Access Manager in production.</li>
           <li>Presence shows active participants.</li>
           <li>Message Persistence can restore incident history.</li>
-          <li>AI assistance is generated server-side and then published back into the incident channel.</li>
+          <li>Typing indicators use ephemeral PubNub Signals and are not durable incident history.</li>
+          <li>AI assistance is generated server-side; customer-visible AI updates are drafted for human review before publishing.</li>
           <li>In production, Access Manager would grant scoped read/write access by user, role, tenant, and incident.</li>
           <li>Sensitive actions would go through backend validation before publishing operational commands.</li>
           <li>This POC demonstrates the real-time workflow pattern, not a complete production auth model.</li>
@@ -677,6 +994,9 @@ export function PulseOpsApp() {
   const [activeIncidentId, setActiveIncidentId] = useState(incidents[0].id);
   const [incidentStatuses, setIncidentStatuses] = useState<Record<string, IncidentStatus>>({});
   const [actionError, setActionError] = useState<string | null>(null);
+  const [composerAudience, setComposerAudience] =
+    useState<MessageAudience>("internal");
+  const [localAiActivity, setLocalAiActivity] = useState<AiAction | null>(null);
 
   const selectedUser = useMemo(
     () => demoUsers.find((user) => user.uuid === selectedUserId) ?? demoUsers[0],
@@ -711,12 +1031,22 @@ export function PulseOpsApp() {
     participants,
     onlineCount,
     lastError,
+    activityIndicators,
     publishIncidentMessage,
+    publishTypingSignal,
+    publishAiActivitySignal,
   } = useIncidentPubNub({
     incident: activeIncident,
     selectedUser,
     onStatusChange: applyStatusFromChannel,
   });
+
+  const canChooseAudience = canSelectAudience(selectedUser);
+  const activeComposerAudience = canChooseAudience ? composerAudience : "customer";
+
+  useEffect(() => {
+    setComposerAudience(defaultAudienceForUser(selectedUser));
+  }, [selectedUser]);
 
   const latestAiSource = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -728,10 +1058,16 @@ export function PulseOpsApp() {
     return null;
   }, [messages]);
 
-  async function sendMessage(text: string) {
+  function handleTyping(audience: MessageAudience, isTyping: boolean) {
+    void publishTypingSignal(audience, isTyping);
+  }
+
+  async function sendMessage(text: string, audience: MessageAudience) {
     setActionError(null);
     try {
-      await publishIncidentMessage(buildUserMessage(activeIncident, selectedUser, text));
+      await publishIncidentMessage(
+        buildUserMessage(activeIncident, selectedUser, text, audience)
+      );
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Message publish failed.");
     }
@@ -758,6 +1094,15 @@ export function PulseOpsApp() {
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "AI publish failed.");
     }
+  }
+
+  async function handleAiActivity(
+    action: AiAction,
+    audience: MessageAudience,
+    isActive: boolean
+  ) {
+    setLocalAiActivity(isActive ? action : null);
+    await publishAiActivitySignal(action, audience, isActive);
   }
 
   return (
@@ -793,7 +1138,18 @@ export function PulseOpsApp() {
           </div>
 
           <MessageFeed messages={messages} />
-          <Composer onSend={sendMessage} disabled={false} />
+          <ActivityIndicators
+            indicators={activityIndicators}
+            localAiAction={localAiActivity}
+          />
+          <Composer
+            onSend={sendMessage}
+            onTyping={handleTyping}
+            disabled={false}
+            audience={activeComposerAudience}
+            canChooseAudience={canChooseAudience}
+            onAudienceChange={setComposerAudience}
+          />
         </section>
 
         <aside className="border-l border-pn-border bg-pn-card">
@@ -807,6 +1163,7 @@ export function PulseOpsApp() {
             messages={messages}
             latestAiSource={latestAiSource}
             onPublishAi={publishAiMessage}
+            onAiActivity={handleAiActivity}
           />
           <section className="border-b border-pn-border bg-pn-card p-5">
             <div className="flex items-start gap-3">

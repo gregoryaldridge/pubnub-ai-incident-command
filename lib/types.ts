@@ -18,6 +18,8 @@ export type UserRole =
   | "Engineering Manager"
   | "AI Assistant";
 
+export type MessageAudience = "internal" | "customer";
+
 export type DemoUser = {
   uuid: string;
   displayName: string;
@@ -40,6 +42,7 @@ export type Incident = {
 export type IncidentMessage = {
   id: string;
   channel: string;
+  audience: MessageAudience;
   type: MessageType;
   senderId: string;
   senderName: string;
@@ -65,4 +68,20 @@ export type AiResponse = {
   text: string;
   source: AiSource;
   usedMock: boolean;
+};
+
+export type ActivityKind =
+  | "typing"
+  | "ai_summary"
+  | "ai_next_actions"
+  | "ai_customer_update";
+
+export type ActivityIndicator = {
+  id: string;
+  userId: string;
+  displayName: string;
+  role: UserRole;
+  audience: MessageAudience;
+  kind: ActivityKind;
+  expiresAt: number;
 };

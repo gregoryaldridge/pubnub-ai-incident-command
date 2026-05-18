@@ -1,4 +1,4 @@
-import type { DemoUser, Incident, IncidentMessage } from "./types";
+import type { DemoUser, Incident, IncidentMessage, MessageAudience } from "./types";
 
 export const demoUsers: DemoUser[] = [
   {
@@ -35,10 +35,28 @@ export function applyDemoRunId(channel: string) {
   return demoRunId ? `${channel}.${demoRunId}` : channel;
 }
 
+export function getAudienceChannel(channel: string, audience: MessageAudience) {
+  return `${channel}.${audience}`;
+}
+
+export function getAudienceFromChannel(channel: string): MessageAudience | null {
+  if (channel.endsWith(".internal")) {
+    return "internal";
+  }
+
+  if (channel.endsWith(".customer")) {
+    return "customer";
+  }
+
+  return null;
+}
+
 function baseChannelFor(channel: string) {
-  return demoRunId && channel.endsWith(`.${demoRunId}`)
-    ? channel.slice(0, -(demoRunId.length + 1))
-    : channel;
+  const withoutAudience = channel.replace(/\.(internal|customer)$/, "");
+
+  return demoRunId && withoutAudience.endsWith(`.${demoRunId}`)
+    ? withoutAudience.slice(0, -(demoRunId.length + 1))
+    : withoutAudience;
 }
 
 const baseIncidents: Incident[] = [
@@ -97,6 +115,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-checkout-1",
       channel: "incident.checkout-latency",
+      audience: "customer",
       type: "system_event",
       senderId: "system",
       senderName: "PulseOps",
@@ -107,6 +126,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-checkout-2",
       channel: "incident.checkout-latency",
+      audience: "customer",
       type: "user_message",
       senderId: "customer-contact",
       senderName: "Maya Patel",
@@ -117,6 +137,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-checkout-3",
       channel: "incident.checkout-latency",
+      audience: "internal",
       type: "user_message",
       senderId: "support-engineer",
       senderName: "Jordan Lee",
@@ -127,6 +148,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-checkout-4",
       channel: "incident.checkout-latency",
+      audience: "internal",
       type: "user_message",
       senderId: "engineering-manager",
       senderName: "Sam Rivera",
@@ -139,6 +161,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-iot-1",
       channel: "incident.iot-disconnects",
+      audience: "customer",
       type: "system_event",
       senderId: "system",
       senderName: "PulseOps",
@@ -149,6 +172,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-iot-2",
       channel: "incident.iot-disconnects",
+      audience: "customer",
       type: "user_message",
       senderId: "customer-contact",
       senderName: "Maya Patel",
@@ -159,6 +183,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-iot-3",
       channel: "incident.iot-disconnects",
+      audience: "internal",
       type: "user_message",
       senderId: "support-engineer",
       senderName: "Jordan Lee",
@@ -171,6 +196,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-lab-1",
       channel: "incident.lab-results",
+      audience: "customer",
       type: "system_event",
       senderId: "system",
       senderName: "PulseOps",
@@ -181,6 +207,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-lab-2",
       channel: "incident.lab-results",
+      audience: "customer",
       type: "user_message",
       senderId: "customer-contact",
       senderName: "Maya Patel",
@@ -191,6 +218,7 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
     {
       id: "seed-lab-3",
       channel: "incident.lab-results",
+      audience: "internal",
       type: "user_message",
       senderId: "engineering-manager",
       senderName: "Sam Rivera",
@@ -201,11 +229,16 @@ export const seedMessagesByChannel: Record<string, IncidentMessage[]> = {
   ],
 };
 
-export const getSeedMessages = (channel: string) => {
+export const getSeedMessages = (
+  channel: string,
+  audiences: MessageAudience[] = ["internal", "customer"]
+) => {
   const messages = seedMessagesByChannel[baseChannelFor(channel)] ?? [];
 
-  return messages.map((message) => ({
-    ...message,
-    channel,
-  }));
+  return messages
+    .filter((message) => audiences.includes(message.audience))
+    .map((message) => ({
+      ...message,
+      channel: getAudienceChannel(channel, message.audience),
+    }));
 };

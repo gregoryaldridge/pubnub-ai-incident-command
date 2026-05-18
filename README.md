@@ -2,7 +2,7 @@
 
 PulseOps AI Incident Command Center is a same-day sales-engineering proof of concept for showing how PubNub can power a real-time, AI-assisted operational workflow.
 
-The demo models an active customer incident room where support, customer contacts, engineering managers, and an AI assistant coordinate in a shared live channel. Users can switch incidents, publish updates, view presence, restore history when Message Persistence is enabled, ask the AI assistant for summaries and next actions, and publish those AI outputs back into the incident channel as normal events.
+The demo models an active customer incident room where support, customer contacts, engineering managers, and an AI assistant coordinate across internal and customer-visible live channels. Users can switch incidents, publish updates, view presence, restore history when Message Persistence is enabled, ask the AI assistant for summaries and next actions, and review customer-facing AI drafts before publishing them.
 
 The UI uses a PubNub-inspired visual theme for the sales engineering demo, without official PubNub logo artwork or external brand assets.
 
@@ -10,11 +10,12 @@ The UI uses a PubNub-inspired visual theme for the sales engineering demo, witho
 
 This is intentionally more than generic chat. It demonstrates PubNub as a managed real-time interaction layer for operational command centers:
 
-- Each incident maps to a PubNub channel.
+- Each incident maps to internal and customer-visible PubNub channels.
 - PubNub provides low-latency fanout to all active participants.
 - Presence shows who is currently in the room.
+- PubNub Signals provide ephemeral typing and AI activity indicators.
 - Message Persistence can restore the incident timeline.
-- AI assistance is generated server-side, then distributed through PubNub like any other operational event.
+- AI assistance is generated server-side, then distributed through PubNub after the right audience is selected.
 - The UI includes production notes for Access Manager, backend validation, tenant isolation, and auditability.
 
 ## Capabilities Demonstrated
@@ -23,7 +24,8 @@ This is intentionally more than generic chat. It demonstrates PubNub as a manage
 - Entity-based channel subscription with presence events.
 - Message Persistence via `fetchMessages`, with graceful fallback to seeded local history.
 - Presence via `hereNow` and presence state, with graceful fallback when the add-on is unavailable.
-- Incident-specific channels for multiple operational workflows.
+- Audience-scoped incident streams using `.internal` and `.customer` channels.
+- PubNub Signals for lightweight typing and AI activity indicators.
 - Browser-safe environment variables using only publish and subscribe keys.
 - Optional server-side AI route with deterministic mock output when no LLM key is present.
 
@@ -77,13 +79,14 @@ npm run build
 
 ## Demo Script
 
-1. Start on the Checkout latency incident and point out the incident metadata and PubNub channel name.
-2. Switch acting user from Support Engineer to Customer Contact and publish a message.
-3. Open a second browser tab, select a different acting user, and show that updates fan out in real time when PubNub keys are configured.
-4. Change status from Investigating to Identified and explain that status changes are PubNub events.
-5. Use Summarize incident, Suggest next actions, and Draft customer update. Explain that AI runs server-side and publishes results back to PubNub.
-6. Switch to the IoT and lab-results incidents and show that each room has a separate channel and history context.
-7. Expand Architecture Notes and discuss Access Manager and backend validation for production.
+1. Start on the Checkout latency incident and point out the base incident channel.
+2. Show that Support Engineer can send either an internal note or a customer-visible update.
+3. Switch acting user to Customer Contact and show that only customer-visible messages are shown.
+4. Open a second browser tab, select a different acting user, and show real-time fanout plus typing indicators when PubNub keys are configured.
+5. Change status from Investigating to Identified and explain that status changes publish to the customer-visible stream.
+6. Use Summarize incident and Suggest next actions, which publish internally.
+7. Use Draft customer update, review the draft, then publish it to the customer-visible stream.
+8. Expand Architecture Notes and discuss Access Manager and backend validation for production.
 
 ## PubNub Configuration Notes
 
@@ -92,6 +95,8 @@ Live messaging requires publish and subscribe keys.
 Presence requires the PubNub Presence add-on. If Presence is not enabled, the app shows a fallback notice and continues running.
 
 Message history requires Message Persistence. If Message Persistence is not enabled or returns no messages, the app falls back to seeded incident messages.
+
+Typing and AI activity indicators are ephemeral PubNub Signals. They are intentionally not shown as normal incident messages and should not be treated as durable history.
 
 No PubNub secret key is used in browser code. Access Manager token issuing belongs on a trusted backend.
 

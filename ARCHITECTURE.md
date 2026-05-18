@@ -2,21 +2,31 @@
 
 ## Channel Design
 
-Each incident maps to one PubNub channel:
+Each incident maps to two logical PubNub channels:
 
-- `incident.checkout-latency`
-- `incident.iot-disconnects`
-- `incident.lab-results`
+- Internal operational stream: `<base incident channel>.internal`
+- Customer-visible stream: `<base incident channel>.customer`
 
-When `NEXT_PUBLIC_DEMO_RUN_ID` is set, the UI appends that run ID to each incident channel, for example `incident.checkout-latency.demo-001`. This gives each demo run clean PubNub channels without deleting previous history.
+For example:
 
-This keeps fanout, history, presence, and authorization boundaries aligned with the operational room. Production deployments would namespace channels by tenant and environment, for example `tenant.acme.prod.incident.checkout-latency`.
+- `incident.checkout-latency.internal`
+- `incident.checkout-latency.customer`
+
+When `NEXT_PUBLIC_DEMO_RUN_ID` is set, the UI appends that run ID to the base incident channel before adding the audience suffix, for example `incident.checkout-latency.demo-001.internal`. This gives each demo run clean PubNub channels without deleting previous history.
+
+Internal participants subscribe to both channels and see one combined timeline ordered by timestamp. Customer contacts subscribe only to the customer-visible channel. This keeps fanout, history, presence, and authorization boundaries aligned with the operational audience. Production deployments would namespace channels by tenant and environment, for example `tenant.acme.prod.incident.checkout-latency.internal`.
 
 ## Presence Design
 
-The client subscribes to the active incident channel with presence events enabled. It sets presence state with display name, role, initials, and last activity, then calls `hereNow` to populate the active participant panel.
+The client subscribes to the visible incident channels with presence events enabled. It sets presence state with display name, role, initials, and last activity, then calls `hereNow` to populate the active participant panel.
 
 If Presence is unavailable, the UI shows a non-blocking fallback notice. The incident workflow still works as a message-driven experience.
+
+## Activity Signals
+
+Typing and AI activity indicators use PubNub Signals on the same audience channel as the current action. Signals are ephemeral real-time events, not normal incident messages, and they are not stored in Message Persistence.
+
+The client throttles typing signals, expires indicators after a few seconds, and suppresses indicators from the same user. Production systems should treat these as UX hints only, not audit or incident history.
 
 ## Message Schema
 
@@ -26,6 +36,7 @@ Messages use a shared operational envelope:
 type IncidentMessage = {
   id: string;
   channel: string;
+  audience: "internal" | "customer";
   type:
     | "user_message"
     | "system_event"
@@ -44,6 +55,8 @@ type IncidentMessage = {
 
 The `customMessageType` on PubNub publish is set to the event type, which makes it easier to reason about event categories downstream.
 
+Status changes publish to the customer-visible channel so both internal participants and customer contacts see them. Internal notes stay on the internal channel.
+
 ## AI Route Design
 
 The local Next.js route `POST /api/ai` receives:
@@ -54,11 +67,11 @@ The local Next.js route `POST /api/ai` receives:
 
 If `OPENAI_API_KEY` is present, the route calls the OpenAI Responses API from the server. If the key is absent or the request fails, it returns deterministic mock output so the demo remains usable offline or in a no-secret environment.
 
-The browser never receives an LLM key. AI output is published back into the active PubNub channel as `ai_summary`, `ai_next_actions`, or `ai_customer_update`.
+The browser never receives an LLM key. AI summaries and next actions publish to the internal channel. Customer-visible AI updates are generated as drafts in the AI panel and require a human click before publishing to the customer-visible channel.
 
 ## Security Model
 
-This POC does not implement full authentication. It uses local user switching to demonstrate roles and message attribution.
+This POC does not implement full authentication. It uses local user switching plus client-side subscription choices to simulate roles and message attribution.
 
 Production would add:
 
@@ -72,8 +85,8 @@ Production would add:
 
 Access Manager should grant short-lived, scoped tokens:
 
-- Read access to incident channels where the user is a participant.
-- Write access only for allowed roles and event types.
+- Read access to only the audience channels where the user is a participant.
+- Write access only for allowed roles, event types, and audiences.
 - Presence permissions for eligible incident rooms.
 - Admin or manager access for status changes only where authorized.
 - No browser access to PubNub secret keys.
@@ -89,6 +102,7 @@ User chat updates can be client-published when tokens are properly scoped. Highe
 - Operational commands.
 - External ticket or paging actions.
 - AI-generated recommendations that trigger workflow automation.
+- Customer-visible AI updates, which should normally be human-reviewed before publishing.
 
 The backend can validate the action, publish to PubNub, and write an audit record.
 
@@ -103,6 +117,7 @@ Production should capture:
 - Status change history.
 - User, role, tenant, and incident identifiers.
 - Message Persistence retrieval errors.
+- Typing/activity signal volume and expiration behavior.
 
 These events should be correlated with incident IDs and PubNub timetokens.
 

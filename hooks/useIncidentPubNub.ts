@@ -2,13 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PubNub from "pubnub";
-import { demoUsers, getSeedMessages } from "@/lib/data";
+import {
+  aiUser,
+  demoUsers,
+  getAudienceChannel,
+  getAudienceFromChannel,
+  getSeedMessages,
+} from "@/lib/data";
 import { makeId } from "@/lib/format";
 import type {
+  ActivityIndicator,
+  ActivityKind,
+  AiAction,
   DemoUser,
   Incident,
   IncidentMessage,
   IncidentStatus,
+  MessageAudience,
   MessageType,
   PresenceParticipant,
   UserRole,
@@ -31,6 +41,12 @@ type PubNubMessageEnvelope = {
   publisher?: string;
 };
 
+type PubNubSignalEnvelope = {
+  channel?: string;
+  message?: unknown;
+  publisher?: string;
+};
+
 type PubNubPresenceEnvelope = {
   action?: string;
   uuid?: string;
@@ -39,10 +55,21 @@ type PubNubPresenceEnvelope = {
   state?: Record<string, unknown>;
 };
 
+type SignalAudienceCode = "i" | "c";
+type SignalActionCode = "s" | "n" | "u";
+
+type SignalPayload = {
+  t: "t" | "a" | "c";
+  u: string;
+  a: SignalAudienceCode;
+  k?: SignalActionCode;
+};
+
 const publishKey = process.env.NEXT_PUBLIC_PUBNUB_PUBLISH_KEY ?? "";
 const subscribeKey = process.env.NEXT_PUBLIC_PUBNUB_SUBSCRIBE_KEY ?? "";
 
 const requiredKeysConfigured = Boolean(publishKey && subscribeKey);
+const activityTtlMs = 4_000;
 
 const messageTypes: MessageType[] = [
   "user_message",
@@ -57,6 +84,10 @@ function isMessageType(value: unknown): value is MessageType {
   return typeof value === "string" && messageTypes.includes(value as MessageType);
 }
 
+function isMessageAudience(value: unknown): value is MessageAudience {
+  return value === "internal" || value === "customer";
+}
+
 function isIncidentStatus(value: unknown): value is IncidentStatus {
   return (
     value === "Investigating" ||
@@ -64,6 +95,16 @@ function isIncidentStatus(value: unknown): value is IncidentStatus {
     value === "Mitigating" ||
     value === "Resolved"
   );
+}
+
+function visibleAudiencesFor(user: DemoUser): MessageAudience[] {
+  return user.role === "Customer Contact" ? ["customer"] : ["internal", "customer"];
+}
+
+function historyLabel(audiences: MessageAudience[]) {
+  return audiences.length > 1
+    ? "internal and customer-visible history"
+    : "customer-visible history";
 }
 
 function timetokenToIso(timetoken: unknown) {
@@ -90,6 +131,13 @@ function normalizeMessage(
   }
 
   const candidate = payload as Partial<IncidentMessage>;
+  const audience = isMessageAudience(candidate.audience)
+    ? candidate.audience
+    : getAudienceFromChannel(channel);
+
+  if (!audience) {
+    return null;
+  }
 
   if (!candidate.text || typeof candidate.text !== "string") {
     return null;
@@ -108,6 +156,7 @@ function normalizeMessage(
       typeof candidate.channel === "string" && candidate.channel
         ? candidate.channel
         : channel,
+    audience,
     type: candidate.type,
     senderId:
       typeof candidate.senderId === "string" && candidate.senderId
@@ -168,20 +217,97 @@ function sortMessages(messages: IncidentMessage[]) {
   );
 }
 
+function dedupeParticipants(participants: PresenceParticipant[]) {
+  return [...new Map(participants.map((participant) => [participant.uuid, participant])).values()];
+}
+
+function activityKindForAction(action: AiAction): ActivityKind {
+  if (action === "summary") return "ai_summary";
+  if (action === "next_actions") return "ai_next_actions";
+  return "ai_customer_update";
+}
+
+function actionSignalCode(action: AiAction): SignalActionCode {
+  if (action === "summary") return "s";
+  if (action === "next_actions") return "n";
+  return "u";
+}
+
+function activityKindFromCode(code?: SignalActionCode): ActivityKind | null {
+  if (code === "s") return "ai_summary";
+  if (code === "n") return "ai_next_actions";
+  if (code === "u") return "ai_customer_update";
+  return null;
+}
+
+function audienceCode(audience: MessageAudience): SignalAudienceCode {
+  return audience === "internal" ? "i" : "c";
+}
+
+function audienceFromCode(code?: SignalAudienceCode): MessageAudience | null {
+  if (code === "i") return "internal";
+  if (code === "c") return "customer";
+  return null;
+}
+
+function encodeSignalPayload(payload: SignalPayload) {
+  return [payload.t, payload.u, payload.a, payload.k ?? ""].join("|");
+}
+
+function parseSignalPayload(message: unknown): SignalPayload | null {
+  if (typeof message !== "string") {
+    return null;
+  }
+
+  const [type, userId, audience, kind] = message.split("|");
+
+  if (type !== "t" && type !== "a" && type !== "c") {
+    return null;
+  }
+
+  if (!userId || (audience !== "i" && audience !== "c")) {
+    return null;
+  }
+
+  if (kind && kind !== "s" && kind !== "n" && kind !== "u") {
+    return null;
+  }
+
+  return {
+    t: type,
+    u: userId,
+    a: audience,
+    k: kind ? (kind as SignalActionCode) : undefined,
+  };
+}
+
 export function useIncidentPubNub({
   incident,
   selectedUser,
   onStatusChange,
 }: UseIncidentPubNubArgs) {
+  const visibleAudiences = useMemo(
+    () => visibleAudiencesFor(selectedUser),
+    [selectedUser]
+  );
+  const visibleChannels = useMemo(
+    () =>
+      visibleAudiences.map((audience) =>
+        getAudienceChannel(incident.channel, audience)
+      ),
+    [incident.channel, visibleAudiences]
+  );
+  const visibleChannelKey = visibleChannels.join("|");
+
   const [messages, setMessages] = useState<IncidentMessage[]>(() =>
-    getSeedMessages(incident.channel)
+    getSeedMessages(incident.channel, visibleAudiences)
   );
   const [historyMode, setHistoryMode] = useState<HistoryMode>(
     requiredKeysConfigured ? "loading" : "not_configured"
   );
   const [historyNotice, setHistoryNotice] = useState(
     requiredKeysConfigured
-      ? "Checking PubNub Message Persistence for incident history."
+      ? `Checking PubNub Message Persistence for ${historyLabel(visibleAudiences)}.`
       : "Demo seed history is shown until PubNub publish and subscribe keys are configured."
   );
   const [presenceMode, setPresenceMode] = useState<PresenceMode>(
@@ -198,6 +324,9 @@ export function useIncidentPubNub({
   const [lastActivityByUser, setLastActivityByUser] = useState<
     Record<string, string>
   >({});
+  const [activityIndicators, setActivityIndicators] = useState<ActivityIndicator[]>(
+    []
+  );
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(
     requiredKeysConfigured ? "connecting" : "not_configured"
   );
@@ -221,7 +350,11 @@ export function useIncidentPubNub({
 
   const appendMessage = useCallback((message: IncidentMessage) => {
     setMessages((current) => {
-      if (current.some((item) => item.id === message.id)) {
+      if (
+        current.some(
+          (item) => item.id === message.id && item.channel === message.channel
+        )
+      ) {
         return current;
       }
 
@@ -234,6 +367,28 @@ export function useIncidentPubNub({
     }));
   }, []);
 
+  const upsertActivity = useCallback((indicator: ActivityIndicator) => {
+    setActivityIndicators((current) => {
+      const next = current.filter((item) => item.id !== indicator.id);
+      return [...next, indicator];
+    });
+  }, []);
+
+  const removeActivity = useCallback((id: string) => {
+    setActivityIndicators((current) => current.filter((item) => item.id !== id));
+  }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      setActivityIndicators((current) =>
+        current.filter((indicator) => indicator.expiresAt > now)
+      );
+    }, 1_000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (pubnub) {
@@ -244,14 +399,15 @@ export function useIncidentPubNub({
   }, [pubnub]);
 
   useEffect(() => {
-    setMessages(getSeedMessages(incident.channel));
+    setMessages(getSeedMessages(incident.channel, visibleAudiences));
     setHistoryMode(requiredKeysConfigured ? "loading" : "not_configured");
     setHistoryNotice(
       requiredKeysConfigured
-        ? "Checking PubNub Message Persistence for incident history."
+        ? `Checking PubNub Message Persistence for ${historyLabel(visibleAudiences)}.`
         : "Demo seed history is shown until PubNub publish and subscribe keys are configured."
     );
     setPresenceParticipants([]);
+    setActivityIndicators([]);
     setPresenceMode(requiredKeysConfigured ? "fallback" : "not_configured");
     setPresenceNotice(
       requiredKeysConfigured
@@ -260,7 +416,7 @@ export function useIncidentPubNub({
     );
     setConnectionMode(requiredKeysConfigured ? "connecting" : "not_configured");
     setLastError(null);
-  }, [incident.channel]);
+  }, [incident.channel, visibleAudiences]);
 
   useEffect(() => {
     if (!pubnub) {
@@ -273,7 +429,7 @@ export function useIncidentPubNub({
     async function loadHistory() {
       try {
         const result = await client.fetchMessages({
-          channels: [incident.channel],
+          channels: visibleChannels,
           count: 50,
           includeUUID: true,
           includeMeta: true,
@@ -284,27 +440,26 @@ export function useIncidentPubNub({
           return;
         }
 
-        const historyMessages =
-          result.channels?.[incident.channel]
-            ?.map((entry) =>
-              normalizeMessage(
-                entry.message,
-                incident.channel,
-                entry.timetoken,
-                entry.uuid
+        const historyMessages = visibleChannels.flatMap(
+          (channel) =>
+            result.channels?.[channel]
+              ?.map((entry) =>
+                normalizeMessage(entry.message, channel, entry.timetoken, entry.uuid)
               )
-            )
-            .filter((message): message is IncidentMessage => Boolean(message)) ??
-          [];
+              .filter((message): message is IncidentMessage => Boolean(message)) ??
+            []
+        );
 
         if (historyMessages.length > 0) {
           setMessages(sortMessages(historyMessages));
           setHistoryMode("live");
-          setHistoryNotice("Showing history restored from PubNub Message Persistence.");
+          setHistoryNotice(
+            `Showing ${historyLabel(visibleAudiences)} restored from PubNub Message Persistence.`
+          );
         } else {
           setHistoryMode("seed");
           setHistoryNotice(
-            "No stored messages were returned, so demo seed history is shown until live events arrive."
+            `No stored ${historyLabel(visibleAudiences)} was returned, so demo seed history is shown until live events arrive.`
           );
         }
       } catch (error) {
@@ -323,7 +478,7 @@ export function useIncidentPubNub({
     return () => {
       cancelled = true;
     };
-  }, [incident.channel, pubnub]);
+  }, [pubnub, visibleAudiences, visibleChannelKey, visibleChannels]);
 
   useEffect(() => {
     if (!pubnub) {
@@ -331,15 +486,16 @@ export function useIncidentPubNub({
     }
 
     const client = pubnub;
-    const subscription = client
-      .channel(incident.channel)
-      .subscription({ receivePresenceEvents: true });
+    const subscription = client.subscriptionSet({
+      channels: visibleChannels,
+      subscriptionOptions: { receivePresenceEvents: true },
+    });
 
     subscription.addListener({
       message: (event: PubNubMessageEnvelope) => {
         const nextMessage = normalizeMessage(
           event.message,
-          event.channel ?? incident.channel,
+          event.channel ?? visibleChannels[0],
           event.timetoken,
           event.publisher
         );
@@ -357,6 +513,41 @@ export function useIncidentPubNub({
           onStatusChange?.(nextMessage.metadata.status);
         }
       },
+      signal: (event: PubNubSignalEnvelope) => {
+        const payload = parseSignalPayload(event.message);
+
+        if (!payload || payload.u === selectedUser.uuid) {
+          return;
+        }
+
+        const audience =
+          audienceFromCode(payload.a) ??
+          getAudienceFromChannel(event.channel ?? "") ??
+          "customer";
+        const known = knownUserForUuid(payload.u);
+        const kind = payload.k ? activityKindFromCode(payload.k) : "typing";
+
+        if (!kind) {
+          return;
+        }
+
+        const id = `${payload.u}-${kind}-${audience}`;
+
+        if (payload.t === "c") {
+          removeActivity(id);
+          return;
+        }
+
+        upsertActivity({
+          id,
+          userId: payload.u,
+          displayName: known.displayName,
+          role: known.role,
+          audience,
+          kind,
+          expiresAt: Date.now() + activityTtlMs,
+        });
+      },
       presence: (event: PubNubPresenceEnvelope) => {
         if (event.action === "interval" && typeof event.occupancy === "number") {
           setPresenceMode("live");
@@ -371,7 +562,7 @@ export function useIncidentPubNub({
         }
 
         setPresenceMode("live");
-        setPresenceNotice("Live presence is active for this incident channel.");
+        setPresenceNotice("Live presence is active for the visible incident channels.");
         setPresenceParticipants((current) => {
           const next = new Map(current.map((participant) => [participant.uuid, participant]));
 
@@ -411,7 +602,7 @@ export function useIncidentPubNub({
     async function refreshPresence() {
       try {
         await client.setState({
-          channels: [incident.channel],
+          channels: visibleChannels,
           state: {
             displayName: selectedUser.displayName,
             role: selectedUser.role,
@@ -421,21 +612,24 @@ export function useIncidentPubNub({
         });
 
         const result = await client.hereNow({
-          channels: [incident.channel],
+          channels: visibleChannels,
           includeUUIDs: true,
           includeState: true,
         });
 
-        const channelPresence = result.channels?.[incident.channel];
-        const occupants = channelPresence?.occupants ?? [];
+        const occupants = visibleChannels.flatMap(
+          (channel) => result.channels?.[channel]?.occupants ?? []
+        );
 
         setPresenceParticipants(
-          occupants.map((occupant) =>
-            knownUserForUuid(String(occupant.uuid), stateRecord(occupant.state))
+          dedupeParticipants(
+            occupants.map((occupant) =>
+              knownUserForUuid(String(occupant.uuid), stateRecord(occupant.state))
+            )
           )
         );
         setPresenceMode("live");
-        setPresenceNotice("Live presence is active for this incident channel.");
+        setPresenceNotice("Live presence is active for the visible incident channels.");
       } catch (error) {
         setPresenceMode("fallback");
         setPresenceNotice(
@@ -451,28 +645,88 @@ export function useIncidentPubNub({
       subscription.unsubscribe();
       client.removeListener(statusListener);
     };
-  }, [appendMessage, incident.channel, onStatusChange, pubnub, selectedUser]);
+  }, [
+    appendMessage,
+    onStatusChange,
+    pubnub,
+    removeActivity,
+    selectedUser,
+    upsertActivity,
+    visibleChannelKey,
+    visibleChannels,
+  ]);
 
   const publishIncidentMessage = useCallback(
     async (message: IncidentMessage) => {
+      const channel = getAudienceChannel(incident.channel, message.audience);
+      const nextMessage = { ...message, channel };
+
       if (!pubnub) {
-        appendMessage(message);
+        appendMessage(nextMessage);
         return;
       }
 
       await pubnub.publish({
-        channel: incident.channel,
-        message,
+        channel,
+        message: nextMessage,
         storeInHistory: true,
         sendByPost: true,
         meta: {
-          senderId: message.senderId,
-          type: message.type,
+          senderId: nextMessage.senderId,
+          type: nextMessage.type,
+          audience: nextMessage.audience,
         },
-        customMessageType: message.type,
+        customMessageType: nextMessage.type,
       });
     },
     [appendMessage, incident.channel, pubnub]
+  );
+
+  const publishTypingSignal = useCallback(
+    async (audience: MessageAudience, isTyping: boolean) => {
+      if (!pubnub) {
+        return;
+      }
+
+      try {
+        await pubnub.signal({
+          channel: getAudienceChannel(incident.channel, audience),
+          message: encodeSignalPayload({
+            t: isTyping ? "t" : "c",
+            u: selectedUser.uuid,
+            a: audienceCode(audience),
+          }),
+          customMessageType: "typing",
+        });
+      } catch (error) {
+        setLastError(error instanceof Error ? error.message : "Typing signal failed.");
+      }
+    },
+    [incident.channel, pubnub, selectedUser.uuid]
+  );
+
+  const publishAiActivitySignal = useCallback(
+    async (action: AiAction, audience: MessageAudience, isActive: boolean) => {
+      if (!pubnub) {
+        return;
+      }
+
+      try {
+        await pubnub.signal({
+          channel: getAudienceChannel(incident.channel, audience),
+          message: encodeSignalPayload({
+            t: isActive ? "a" : "c",
+            u: aiUser.uuid,
+            a: audienceCode(audience),
+            k: actionSignalCode(action),
+          }),
+          customMessageType: "activity",
+        });
+      } catch (error) {
+        setLastError(error instanceof Error ? error.message : "AI activity signal failed.");
+      }
+    },
+    [incident.channel, pubnub]
   );
 
   const participants = useMemo(() => {
@@ -495,6 +749,10 @@ export function useIncidentPubNub({
     messages,
     appendMessage,
     publishIncidentMessage,
+    publishTypingSignal,
+    publishAiActivitySignal,
+    activityIndicators,
+    visibleAudiences,
     pubnubConfigured: requiredKeysConfigured,
     connectionMode,
     historyMode,
